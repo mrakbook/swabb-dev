@@ -1,4 +1,4 @@
-"""Configuration loader + region resolver for swabb (M0; no AWS calls)."""
+"""Configuration loader + account/region resolver for swabb (M1)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ except Exception:  # pragma: no cover - optional dependency
     yaml = None  # type: ignore
 
 
-# A pragmatic, static list for M0. You can expand later.
+# A pragmatic, static list; expand later as needed.
 DEFAULT_AWS_REGIONS: List[str] = [
     "us-east-1", "us-east-2", "us-west-1", "us-west-2",
     "ca-central-1",
@@ -38,13 +38,24 @@ class Account:
     role_arn: Optional[str] = None
     regions: Union[str, List[str]] = "all"
 
+    def label(self) -> str:
+        return self.profile or (self.role_arn or "default")
+
+
+@dataclass
+class CostConfig:
+    enabled: bool = True
+    pricing_cache_ttl_hours: int = 24
+    fallback_estimates: Dict[str, float] = field(default_factory=dict)
+
 
 @dataclass
 class SwabbConfig:
     accounts: List[Account] = field(default_factory=lambda: [Account(profile="default", regions="all")])
-    thresholds: Dict[str, int] = field(default_factory=lambda: {"ebs_idle_days": 30})
+    thresholds: Dict[str, int] = field(default_factory=lambda: {"ebs_idle_days": 30, "eip_idle_days": 0})
     exclude_tags: List[str] = field(default_factory=list)
     protect_name_regex: Optional[str] = None
+    cost: CostConfig = field(default_factory=CostConfig)
 
 
 _DEFAULT_SEARCH = [
@@ -88,7 +99,7 @@ def load_config(path_hint: Optional[str] = None) -> SwabbConfig:
     except Exception as e:
         raise RuntimeError(f"Failed to read config {path}: {e}") from e
 
-    accounts = []
+    accounts: List[Account] = []
     for raw in data.get("accounts", []):
         accounts.append(
             Account(
@@ -98,34 +109,39 @@ def load_config(path_hint: Optional[str] = None) -> SwabbConfig:
             )
         )
 
+    # cost config
+    c = data.get("cost", {}) or {}
+    cost = CostConfig(
+        enabled=bool(c.get("enabled", True)),
+        pricing_cache_ttl_hours=int(c.get("pricing_cache_ttl_hours", 24)),
+        fallback_estimates=dict(c.get("fallback_estimates", {})),
+    )
+
     return SwabbConfig(
         accounts=accounts or [Account(profile="default", regions="all")],
-        thresholds=data.get("thresholds", {"ebs_idle_days": 30}),
+        thresholds=data.get("thresholds", {"ebs_idle_days": 30, "eip_idle_days": 0}),
         exclude_tags=list(data.get("exclude_tags", [])),
         protect_name_regex=data.get("protect_name_regex"),
+        cost=cost,
     )
 
 
-def resolve_regions(regions_opt: Optional[str], cfg: SwabbConfig) -> List[Tuple[str, str]]:
+def resolve_regions(regions_opt: Optional[str], cfg: SwabbConfig) -> List[Tuple[Account, str]]:
     """
-    Determine (account_label, region) tuples to iterate.
-    - regions_opt: CLI comma list or "all". If given, applies to the first/only account.
-    - otherwise use each account's regions config (list or "all").
+    Determine list of (Account, region) tuples to iterate.
+
+    - If regions_opt is provided, apply to the *first* account only (M1 simplicity).
+    - Otherwise, respect each account's configured regions (list or "all").
     """
-    pairs: List[Tuple[str, str]] = []
+    pairs: List[Tuple[Account, str]] = []
     if regions_opt:
-        # Apply to first account only for M0
         acct = cfg.accounts[0] if cfg.accounts else Account(profile="default", regions="all")
-        label = acct.profile or (acct.role_arn or "default")
         regions = DEFAULT_AWS_REGIONS if regions_opt == "all" else [r.strip() for r in regions_opt.split(",") if r.strip()]
         for r in regions:
-            pairs.append((label, r))
+            pairs.append((acct, r))
         return pairs
 
-    # From config
-    accts = cfg.accounts or [Account(profile="default", regions="all")]
-    for acct in accts:
-        label = acct.profile or (acct.role_arn or "default")
+    for acct in cfg.accounts or [Account(profile="default", regions="all")]:
         if acct.regions == "all":
             regs = DEFAULT_AWS_REGIONS
         elif isinstance(acct.regions, list):
@@ -133,5 +149,5 @@ def resolve_regions(regions_opt: Optional[str], cfg: SwabbConfig) -> List[Tuple[
         else:
             regs = DEFAULT_AWS_REGIONS
         for r in regs:
-            pairs.append((label, r))
+            pairs.append((acct, r))
     return pairs

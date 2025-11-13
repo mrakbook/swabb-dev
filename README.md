@@ -1,12 +1,21 @@
-# swabb — Cloud Housekeeping CLI (M0 skeleton)
+# swabb — Cloud Housekeeping CLI (M1: Core AWS scanning)
 
-**swabb** is a safe‑by‑default CLI that will scan → report → (later) clean unused cloud resources.
-This M0 delivers a runnable repo with:
+**swabb** is a safe‑by‑default CLI that scans → reports → (later) cleans unused cloud resources.
 
-- ✅ `src` layout, single argparse entrypoint
-- ✅ `-V/--version` (banner supports future build metadata injection)
-- ✅ `scan` command (loads config, iterates regions — **no AWS calls yet**)
-- ✅ Audit logger (rotating file) and table/JSON printers
+This Milestone delivers:
 
-> The version banner is compatible with a future packaging step that injects
-> `_build_meta.py`, mirroring the approach from the whyx build scripts. :contentReference[oaicite:1]{index=1}
+- ✅ **AWS scanning** for:
+  - **EBS volumes**: detect *unattached* (`status=available`) volumes older than N days
+  - **Elastic IPs**: detect *unassociated* addresses
+- ✅ **Plan output** (JSON) + **pretty table** on the console
+- ✅ **Pricing stub/cache** with **config fallback** (no Pricing API calls yet)
+- ✅ **Unit & E2E tests** powered by **botocore Stubber**
+
+## Quick start (from source)
+
+```bash
+# Bootstrap a venv and run the CLI from source
+./scripts/run-swabb.sh scan -t ebs,eip --regions us-east-1 --older-than 30 --cost --output table
+
+# JSON plan + write to disk
+./scripts/run-swabb.sh scan -t ebs,eip --regions us-east-1 --older-than 30 --cost --output json --plan-out plan.json

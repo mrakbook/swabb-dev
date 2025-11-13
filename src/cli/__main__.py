@@ -12,7 +12,7 @@ import argparse
 import logging
 
 from ._shared import DISPLAY_VERSION, set_console_log_level
-from .help import CLI_DESCRIPTION, SCAN_HELP
+from .help import CLI_DESCRIPTION
 from .commands.scan import register_scan_command
 
 
@@ -27,8 +27,6 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Console verbosity flags used by subcommands (-v/--debug live there for now)
-    # If you later move them global, wire here:
     set_console_log_level(logging.INFO)
 
     if hasattr(args, "func"):
