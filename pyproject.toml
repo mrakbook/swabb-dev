@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swabb"
+version = "0.0.0"
+description = "Swabb CLI: cloud housekeeping from your terminal"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Your Name", email = "you@example.com" }]
+dependencies = []  # keep zero-deps at M0; YAML is optional below
+
+# Optional: allow 'pip install swabb[yaml]' to enable YAML configs
+[project.optional-dependencies]
+yaml = ["pyyaml>=6.0"]
+
+[project.scripts]
+swabb = "src.cli.__main__:main"
+
+[tool.setuptools]
+# We intentionally follow the 'src-rooted' pattern like 'whyx' (package named 'src').
+packages = ["src", "src.cli", "src.cli.help", "src.cli.commands", "src.core"]
